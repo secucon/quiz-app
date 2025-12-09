@@ -8,19 +8,22 @@ const CONFIG = {
     // 접근 허용할 이메일 주소 (본인 이메일)
     ALLOWED_EMAILS: [
         'hello.jguru@gmail.com'
-    ]
+    ],
+
+    // Google Sheets API 스코프
+    SCOPES: 'https://www.googleapis.com/auth/spreadsheets'
 };
 
 // 앱 상태
 const state = {
-    user: null, // 로그인한 사용자 정보
+    user: null,
+    accessToken: null, // OAuth 액세스 토큰
+    tokenClient: null, // Google Token Client
     sheetId: '',
     sheetName: 'Sheet1',
-    apiKey: '',
-    webAppUrl: '', // Google Apps Script 웹앱 URL
     questions: [],
     currentIndex: 0,
-    showKorean: true, // true: D열(한글), false: C열(영어)
+    showKorean: true,
 };
 
 // DOM 요소
@@ -35,8 +38,6 @@ const elements = {
     logoutBtn: document.getElementById('logout-btn'),
     sheetIdInput: document.getElementById('sheet-id'),
     sheetNameInput: document.getElementById('sheet-name'),
-    apiKeyInput: document.getElementById('api-key'),
-    webAppUrlInput: document.getElementById('webapp-url'),
     startBtn: document.getElementById('start-btn'),
     progress: document.getElementById('progress'),
     langToggle: document.getElementById('lang-toggle'),
@@ -49,9 +50,6 @@ const elements = {
 
 // 초기화
 function init() {
-    // Google Sign-In 초기화
-    initGoogleSignIn();
-
     // 이벤트 리스너
     elements.logoutBtn.addEventListener('click', handleLogout);
     elements.startBtn.addEventListener('click', startQuiz);
@@ -68,14 +66,27 @@ function init() {
 
     // 키보드 단축키
     document.addEventListener('keydown', handleKeyboard);
+
+    // Google Identity Services 로드 완료 대기
+    waitForGoogleLibrary();
 }
 
-// Google Sign-In 초기화
-function initGoogleSignIn() {
+// Google 라이브러리 로드 대기
+function waitForGoogleLibrary() {
+    if (typeof google !== 'undefined' && google.accounts) {
+        initGoogleAuth();
+    } else {
+        setTimeout(waitForGoogleLibrary, 100);
+    }
+}
+
+// Google 인증 초기화
+function initGoogleAuth() {
+    // 1. ID 토큰용 (로그인/사용자 정보)
     google.accounts.id.initialize({
         client_id: CONFIG.GOOGLE_CLIENT_ID,
         callback: handleCredentialResponse,
-        auto_select: true, // 자동 로그인 시도
+        auto_select: true,
     });
 
     google.accounts.id.renderButton(
@@ -89,20 +100,16 @@ function initGoogleSignIn() {
         }
     );
 
-    // 이미 로그인된 세션 확인
-    const savedUser = localStorage.getItem('quizUser');
-    if (savedUser) {
-        const user = JSON.parse(savedUser);
-        if (isEmailAllowed(user.email)) {
-            state.user = user;
-            showSetupScreen();
-        }
-    }
+    // 2. 액세스 토큰용 (API 접근)
+    state.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        scope: CONFIG.SCOPES,
+        callback: handleTokenResponse,
+    });
 }
 
-// Google 로그인 응답 처리
+// Google 로그인 응답 처리 (ID 토큰)
 function handleCredentialResponse(response) {
-    // JWT 토큰 디코딩
     const payload = decodeJwtPayload(response.credential);
 
     if (!payload) {
@@ -113,14 +120,27 @@ function handleCredentialResponse(response) {
     const email = payload.email;
     const name = payload.name;
 
-    // 이메일 허용 여부 확인
     if (!isEmailAllowed(email)) {
         showLoginError(`접근이 거부되었습니다.\n(${email})`);
         return;
     }
 
-    // 로그인 성공
+    // 로그인 성공 - 이제 액세스 토큰 요청
     state.user = { email, name };
+
+    // 액세스 토큰 요청 (Sheets API 접근용)
+    state.tokenClient.requestAccessToken({ prompt: '' });
+}
+
+// 액세스 토큰 응답 처리
+function handleTokenResponse(response) {
+    if (response.error) {
+        showLoginError('API 접근 권한을 얻지 못했습니다.');
+        console.error('Token error:', response);
+        return;
+    }
+
+    state.accessToken = response.access_token;
     localStorage.setItem('quizUser', JSON.stringify(state.user));
     showSetupScreen();
 }
@@ -164,18 +184,20 @@ function showSetupScreen() {
     // 로컬 스토리지에서 설정 복원
     const savedSheetId = localStorage.getItem('quizSheetId');
     const savedSheetName = localStorage.getItem('quizSheetName');
-    const savedApiKey = localStorage.getItem('quizApiKey');
-    const savedWebAppUrl = localStorage.getItem('quizWebAppUrl');
 
     if (savedSheetId) elements.sheetIdInput.value = savedSheetId;
     if (savedSheetName) elements.sheetNameInput.value = savedSheetName;
-    if (savedApiKey) elements.apiKeyInput.value = savedApiKey;
-    if (savedWebAppUrl) elements.webAppUrlInput.value = savedWebAppUrl;
 }
 
 // 로그아웃 처리
 function handleLogout() {
+    // 토큰 취소
+    if (state.accessToken) {
+        google.accounts.oauth2.revoke(state.accessToken);
+    }
+
     state.user = null;
+    state.accessToken = null;
     localStorage.removeItem('quizUser');
     google.accounts.id.disableAutoSelect();
 
@@ -189,19 +211,20 @@ function handleLogout() {
 async function startQuiz() {
     state.sheetId = elements.sheetIdInput.value.trim();
     state.sheetName = elements.sheetNameInput.value.trim() || 'Sheet1';
-    state.apiKey = elements.apiKeyInput.value.trim();
-    state.webAppUrl = elements.webAppUrlInput.value.trim();
 
-    if (!state.sheetId || !state.apiKey) {
-        alert('Sheet ID와 API Key를 입력해주세요.');
+    if (!state.sheetId) {
+        alert('Sheet ID를 입력해주세요.');
+        return;
+    }
+
+    if (!state.accessToken) {
+        alert('로그인이 필요합니다.');
         return;
     }
 
     // 설정 저장
     localStorage.setItem('quizSheetId', state.sheetId);
     localStorage.setItem('quizSheetName', state.sheetName);
-    localStorage.setItem('quizApiKey', state.apiKey);
-    localStorage.setItem('quizWebAppUrl', state.webAppUrl);
 
     showLoading(true);
 
@@ -218,14 +241,17 @@ async function startQuiz() {
     }
 }
 
-// Google Sheets에서 문제 로드
+// Google Sheets에서 문제 로드 (OAuth 토큰 사용)
 async function loadQuestions() {
-    // A열(문제번호), B열(인덱스), C열(영문), D열(한글), F열(응답) 로드
-    // 3행부터 시작
     const range = `${state.sheetName}!A3:F`;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/${range}?key=${state.apiKey}`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/${range}`;
 
-    const response = await fetch(url);
+    const response = await fetch(url, {
+        headers: {
+            'Authorization': `Bearer ${state.accessToken}`
+        }
+    });
+
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error?.message || 'API 요청 실패');
@@ -235,12 +261,12 @@ async function loadQuestions() {
     const rows = data.values || [];
 
     state.questions = rows.map((row, i) => ({
-        rowNumber: i + 3, // 실제 스프레드시트 행 번호
-        number: row[0] || '',      // A열: 문제 번호
-        index: row[1] || '',       // B열: 인덱스 (1.1 등)
-        questionEng: row[2] || '', // C열: 영문 문제
-        questionKor: row[3] || '', // D열: 한글 문제
-        response: row[5] || '',    // F열: 사용자 응답 (E열 건너뜀)
+        rowNumber: i + 3,
+        number: row[0] || '',
+        index: row[1] || '',
+        questionEng: row[2] || '',
+        questionKor: row[3] || '',
+        response: row[5] || '',
     }));
 
     console.log(`${state.questions.length}개 문제 로드됨`);
@@ -251,20 +277,13 @@ function renderQuestion() {
     const q = state.questions[state.currentIndex];
     if (!q) return;
 
-    // 진행률
     elements.progress.textContent = `${state.currentIndex + 1} / ${state.questions.length}`;
-
-    // 문제 번호
     elements.questionIndex.textContent = `Q${q.number} (${q.index})`;
 
-    // 문제 텍스트
     const text = state.showKorean ? q.questionKor : q.questionEng;
     elements.questionText.textContent = text || '(문제 없음)';
-
-    // 언어 토글 버튼
     elements.langToggle.textContent = state.showKorean ? 'EN' : 'KR';
 
-    // 답안 버튼 초기화
     elements.answerBtns.forEach(btn => {
         btn.classList.remove('selected', 'correct', 'wrong');
         if (q.response && btn.dataset.answer === q.response.toUpperCase()) {
@@ -286,49 +305,44 @@ async function selectAnswer(answer) {
         }
     });
 
-    // 상태 업데이트
     q.response = answer;
 
     // Google Sheets에 저장
     await saveResponse(q.rowNumber, answer);
 }
 
-// 응답 저장
+// 응답 저장 (OAuth 토큰으로 직접 저장)
 async function saveResponse(rowNumber, answer) {
-    // 웹앱 URL이 없으면 로컬에만 저장
-    if (!state.webAppUrl) {
+    if (!state.accessToken) {
+        console.log('토큰 없음 - 로컬에만 저장');
         localStorage.setItem(`quiz_response_${state.sheetId}_${rowNumber}`, answer);
-        console.log(`로컬 저장: 행 ${rowNumber}, 답: ${answer}`);
         return;
     }
 
-    showLoading(true);
-
     try {
-        const response = await fetch(state.webAppUrl, {
-            method: 'POST',
-            mode: 'no-cors', // CORS 우회
+        const range = `${state.sheetName}!F${rowNumber}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/${range}?valueInputOption=RAW`;
+
+        const response = await fetch(url, {
+            method: 'PUT',
             headers: {
+                'Authorization': `Bearer ${state.accessToken}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                rowNumber: rowNumber,
-                answer: answer
+                values: [[answer]]
             })
         });
 
-        // no-cors 모드에서는 응답을 읽을 수 없지만 저장은 됨
-        console.log(`시트 저장 요청: 행 ${rowNumber}, 답: ${answer}`);
+        if (!response.ok) {
+            throw new Error('저장 실패');
+        }
 
-        // 로컬에도 백업 저장
-        localStorage.setItem(`quiz_response_${state.sheetId}_${rowNumber}`, answer);
+        console.log(`시트 저장 완료: 행 ${rowNumber}, 답: ${answer}`);
 
     } catch (error) {
         console.error('저장 실패:', error);
-        // 실패 시 로컬에만 저장
         localStorage.setItem(`quiz_response_${state.sheetId}_${rowNumber}`, answer);
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -360,6 +374,7 @@ function setupSwipeGestures() {
     let startY = 0;
 
     const quizContent = document.querySelector('.quiz-content');
+    if (!quizContent) return;
 
     quizContent.addEventListener('touchstart', (e) => {
         startX = e.touches[0].clientX;
@@ -372,12 +387,11 @@ function setupSwipeGestures() {
         const diffX = endX - startX;
         const diffY = endY - startY;
 
-        // 수평 스와이프가 수직보다 클 때만
         if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
             if (diffX > 0) {
-                prevQuestion(); // 오른쪽 스와이프 = 이전
+                prevQuestion();
             } else {
-                nextQuestion(); // 왼쪽 스와이프 = 다음
+                nextQuestion();
             }
         }
     }, { passive: true });
@@ -386,6 +400,7 @@ function setupSwipeGestures() {
 // 키보드 단축키
 function handleKeyboard(e) {
     if (elements.setupScreen.classList.contains('active')) return;
+    if (elements.loginScreen.classList.contains('active')) return;
 
     switch (e.key) {
         case 'ArrowLeft':

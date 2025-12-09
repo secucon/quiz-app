@@ -270,6 +270,17 @@ async function loadQuestions() {
     }));
 
     console.log(`${state.questions.length}개 문제 로드됨`);
+
+    // 첫 번째 미응답 문제로 이동
+    const firstUnanswered = state.questions.findIndex(q => !q.response);
+    if (firstUnanswered !== -1) {
+        state.currentIndex = firstUnanswered;
+        console.log(`미응답 문제로 이동: ${firstUnanswered + 1}번`);
+    } else {
+        // 모든 문제에 응답한 경우 첫 문제로
+        state.currentIndex = 0;
+        console.log('모든 문제 응답 완료');
+    }
 }
 
 // 문제 렌더링

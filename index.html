@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>자격증 퀴즈</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- 로그인 화면 -->
+        <div id="login-screen" class="screen active">
+            <h1>자격증 퀴즈</h1>
+            <p class="login-desc">계속하려면 Google 계정으로 로그인하세요</p>
+            <div id="google-signin-btn"></div>
+            <p id="login-error" class="error-msg"></p>
+        </div>
+
+        <!-- 설정 화면 -->
+        <div id="setup-screen" class="screen">
+            <div class="user-info">
+                <span id="user-email"></span>
+                <button id="logout-btn" class="btn-logout">로그아웃</button>
+            </div>
+            <h1>자격증 퀴즈</h1>
+            <div class="setup-form">
+                <label for="sheet-id">Google Sheet ID</label>
+                <input type="text" id="sheet-id" placeholder="스프레드시트 ID 입력">
+
+                <label for="sheet-name">시트 이름</label>
+                <input type="text" id="sheet-name" value="Sheet1" placeholder="시트 이름">
+
+                <label for="api-key">API Key (읽기용)</label>
+                <input type="text" id="api-key" placeholder="Google API Key">
+
+                <label for="webapp-url">Apps Script 웹앱 URL (쓰기용)</label>
+                <input type="text" id="webapp-url" placeholder="https://script.google.com/...">
+
+                <button id="start-btn" class="btn-primary">시작하기</button>
+            </div>
+            <p class="hint">※ 시트는 "링크가 있는 모든 사용자에게 공개"로 설정해주세요</p>
+        </div>
+
+        <!-- 퀴즈 화면 -->
+        <div id="quiz-screen" class="screen">
+            <header>
+                <span id="progress">1 / 187</span>
+                <button id="lang-toggle" class="btn-lang">EN</button>
+            </header>
+
+            <main class="quiz-content">
+                <div class="question-header">
+                    <span id="question-index" class="q-index">Q1 (1.1)</span>
+                </div>
+                <div id="question-text" class="question-text">
+                    문제를 불러오는 중...
+                </div>
+            </main>
+
+            <footer class="answer-section">
+                <div class="answer-grid">
+                    <button class="answer-btn" data-answer="A">A</button>
+                    <button class="answer-btn" data-answer="B">B</button>
+                    <button class="answer-btn" data-answer="C">C</button>
+                    <button class="answer-btn" data-answer="D">D</button>
+                </div>
+                <div class="nav-controls">
+                    <button id="prev-btn" class="nav-btn">← 이전</button>
+                    <button id="next-btn" class="nav-btn">다음 →</button>
+                </div>
+            </footer>
+        </div>
+
+        <!-- 로딩 오버레이 -->
+        <div id="loading" class="loading-overlay">
+            <div class="spinner"></div>
+            <p>저장 중...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

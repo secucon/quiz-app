@@ -180,6 +180,22 @@ header {
     font-weight: bold;
 }
 
+.btn-home {
+    padding: 8px 16px;
+    border: 2px solid var(--text-muted);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-home:active {
+    background: var(--text-muted);
+    color: var(--bg);
+}
+
 .btn-lang {
     padding: 8px 16px;
     border: 2px solid var(--primary);

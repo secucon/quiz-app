@@ -40,6 +40,7 @@ const elements = {
     sheetNameInput: document.getElementById('sheet-name'),
     startBtn: document.getElementById('start-btn'),
     progress: document.getElementById('progress'),
+    homeBtn: document.getElementById('home-btn'),
     langToggle: document.getElementById('lang-toggle'),
     questionIndex: document.getElementById('question-index'),
     questionText: document.getElementById('question-text'),
@@ -53,6 +54,7 @@ function init() {
     // 이벤트 리스너
     elements.logoutBtn.addEventListener('click', handleLogout);
     elements.startBtn.addEventListener('click', startQuiz);
+    elements.homeBtn.addEventListener('click', goHome);
     elements.langToggle.addEventListener('click', toggleLanguage);
     elements.prevBtn.addEventListener('click', prevQuestion);
     elements.nextBtn.addEventListener('click', nextQuestion);
@@ -358,6 +360,12 @@ async function saveResponse(rowNumber, answer) {
         console.error('저장 실패:', error);
         localStorage.setItem(`quiz_response_${state.sheetId}_${rowNumber}`, answer);
     }
+}
+
+// 홈으로 이동
+function goHome() {
+    elements.quizScreen.classList.remove('active');
+    elements.setupScreen.classList.add('active');
 }
 
 // 언어 토글

@@ -106,6 +106,9 @@ function initGoogleAuth() {
         scope: CONFIG.SCOPES,
         callback: handleTokenResponse,
     });
+
+    // 3. 자동 로그인 시도 (One Tap)
+    google.accounts.id.prompt();
 }
 
 // Google 로그인 응답 처리 (ID 토큰)

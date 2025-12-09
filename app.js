@@ -243,7 +243,7 @@ async function startQuiz() {
 
 // Google Sheets에서 문제 로드 (OAuth 토큰 사용)
 async function loadQuestions() {
-    const range = `${state.sheetName}!A3:F`;
+    const range = `${state.sheetName}!A3:G`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/${range}`;
 
     const response = await fetch(url, {
@@ -266,7 +266,7 @@ async function loadQuestions() {
         index: row[1] || '',
         questionEng: row[2] || '',
         questionKor: row[3] || '',
-        response: row[5] || '',
+        response: row[6] || '',  // G열 (index 6)
     }));
 
     console.log(`${state.questions.length}개 문제 로드됨`);
@@ -320,7 +320,7 @@ async function saveResponse(rowNumber, answer) {
     }
 
     try {
-        const range = `${state.sheetName}!F${rowNumber}`;
+        const range = `${state.sheetName}!G${rowNumber}`;
         const url = `https://sheets.googleapis.com/v4/spreadsheets/${state.sheetId}/values/${range}?valueInputOption=RAW`;
 
         const response = await fetch(url, {
